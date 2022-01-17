@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
 
-const AdSchema = new mongoose.Schema({
-    id: {
-        type: String
+const AdSchemaFull = new mongoose.Schema({
+    ad: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        ref: 'Ad'
     },
     model: {
+        type: String
+    },
+    url: {
         type: String
     },
     variant: {
@@ -44,14 +49,13 @@ const AdSchema = new mongoose.Schema({
         type: String
     },
     more_detals: mongoose.Schema.Types.Mixed,
-    url: {
-        type: String
-    },
     dealership: {
         type: Boolean
     },
+}, {
+    timestamps: true
 });
 
-const AdModel = mongoose.model("Ad", AdSchema);
+const AdModelFull = mongoose.model("Full_Ad", AdSchemaFull);
 
-module.exports = AdModel;
+module.exports = AdModelFull;
