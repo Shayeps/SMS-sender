@@ -16,23 +16,24 @@ dotenv.config();
 let clients = [];
 
 const initiateForAll = async () => {
-    console.log('---------------------------------------------');
     clients = await UserModel.find({});
+
     if (!clients) return loggingFunc(`Error while pulling customers from DB`, 'error');
 
     clients.forEach(async (client) => {
-        let { funds, email, search_for, frst_run, name, srch_urls } = client;
+        let { name, srch_urls, funds } = client;
+        client.req_id = [];
         if (!funds) {
-            loggingFunc(`No funds for user ${email}`, 'error');
+            loggingFunc(`No funds for user ${name}`, 'error');
         } else {
-            let options = buildRequest(srch_urls, frst_run, search_for);
-            try {
-                let res = await request(options);
-                client['req_id'] = JSON.parse(res).collection_id;
-                console.log('REQ ', name, client['req_id'])
-                console.log('---------------------------------------------')
-            } catch (error) {
-                loggingFunc(`${error}`, 'error');
+            let requests = buildRequest(srch_urls);
+            if (requests) {
+                try {
+                    let res = await Promise.allSettled(requests);
+                    res.forEach(r => client.req_id.push(JSON.parse(r.value).collection_id))
+                } catch (error) {
+                    loggingFunc(`${error}`, 'error');
+                }
             }
         }
     })
@@ -44,9 +45,10 @@ const initiateForAll = async () => {
 router.post('/result', async (req, res) => {
     let target_path = req.get('dca-collection-id');
     if (!target_path.includes('test')) {
-        let usr = clients.find(client => client.req_id === target_path);
+        let usr = clients.find(client => client.req_id[0] === target_path);
         const result = await streamToString(req);
-        await insertToMongo(result, usr);
+        //console.log('RESULT: ', result);
+        //await insertToMongo(result, usr);
     }
 
     // -------------- pushing the response into mongo and send SMS
@@ -120,7 +122,7 @@ function sendSMS(results, usr) {
                 if (usr.search_for === 'cars')
                     body += `${ad.model} - ${ad.url} \n`
                 else
-                body += `${ad.url} \n`
+                    body += `${ad.url} \n`
             }
         } else if (results.length >= 10) {
             body = `There are 10 or more new ads`
@@ -141,31 +143,67 @@ function sendSMS(results, usr) {
     }
 };
 
-function buildRequest(srch_urls, frst_run, search_for) {
-    let url;
-    let rand_queue = uuidv4().split('-')[0];
-    if (search_for === 'cars') {
-        url = `https://api.luminati.io/dca/trigger?collector=c_kx8lhpn3wotk7fazg&queue_next=1&queue=${rand_queue}`;
-        srch_urls = srch_urls.map(u => Object.assign({ url: u.url }, { frst_run }));
-    } else {
-        url = `https://api.luminati.io/dca/trigger?collector=c_kwkqodm0x23zwxb6&queue_next=1&queue=${rand_queue}`;
-        if (frst_run)
-            srch_urls = srch_urls.map(u => Object.assign({ url: u.url }, { num_of_pages: "999", days_back: 10, include_mediator: true }));
-        else
-            srch_urls = srch_urls.map(u => Object.assign({ url: u.url }, { num_of_pages: "1", days_back: 0, include_mediator: true }));
-    };
-    return options = {
-        method: 'POST',
-        url,
-        body: JSON.stringify(srch_urls),
-        headers: {
-            'Authorization': `Bearer ${process.env.PROXY_TOKEN}`,
-            'Content-Type': 'application/json'
-        },
-    }
-}
+function buildRequest(srch_urls) {
+    let nadlan_data = [], cars_data = [], requests = [];
+    srch_urls.forEach(item => {
+        let type;
+        let { url, frst_run } = item;
+        type = url.includes('vehicles') ? type = 'cars' : url.includes('realestate') ? type = 'nadlan' : null;
 
-module.exports = {
-    router,
-    initiateForAll,
-}
+        if (!type) return loggingFunc(`Wrong input URL ${url}`, 'error');
+
+        if (type === 'cars') {
+            cars_data.push(Object.assign({ url, frst_run }));
+                 } 
+            //     else {
+            //         if (JSON.parse(frst_run)) {
+            //             nadlan_data.push(Object.assign({ url, num_of_pages: "999", days_back: 10, include_mediator: true }));
+            //         } else {
+            //             nadlan_data.push(Object.assign({ url, num_of_pages: "1", days_back: 0, include_mediator: true }))
+            //         }
+            //     }
+             })
+
+            if (nadlan_data.length) {
+                options = {
+                    method: 'POST',
+                    url: buildRequestUrl('nadlan'),
+                    body: JSON.stringify(nadlan_data),
+                    headers: {
+                        'Authorization': `Bearer ${process.env.PROXY_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                };
+
+                requests.push(request(options));
+            }
+
+            if (cars_data.length) {
+                options = {
+                    method: 'POST',
+                    url: buildRequestUrl('cars'),
+                    body: JSON.stringify(cars_data),
+                    headers: {
+                        'Authorization': `Bearer ${process.env.PROXY_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                }
+                requests.push(request(options))
+            }
+
+            if (requests.length)
+                return requests;
+            else
+                return loggingFunc('No valid URLs were found', 'error');
+        }
+
+        function buildRequestUrl(type) {
+            let collector_IDs = { cars: `c_kx8lhpn3wotk7fazg`, nadlan: `c_kwkqodm0x23zwxb6` };
+            let rand_queue = uuidv4().split('-')[0];
+            return `https://api.luminati.io/dca/trigger?collector=${collector_IDs[type]}&queue_next=1&queue=${rand_queue}`;
+        }
+
+        module.exports = {
+            router,
+            initiateForAll,
+        }

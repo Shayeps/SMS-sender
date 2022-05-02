@@ -16,18 +16,19 @@ const UserSchema = new mongoose.Schema({
         type: String,
         select: false
     },
-    search_for: {
-        type: String,
-        default: 'cars'
-    },
-    srch_urls: {
-        type: Array,
-        required: true
-    },
-    frst_run: {
-        type: Boolean,
-        default: true
-    },
+    srch_urls: [
+        {
+            url: {
+                type: String,
+            },
+            type: {
+                type: String,
+            },
+            frst_run: {
+                type: String,
+            }
+        }
+    ],
     funds: {
         type: Number
     }

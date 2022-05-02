@@ -22,6 +22,6 @@ const job = schedule.scheduleJob('0,30 8-20 * * *', () => {
 //INITIATION FOR TESTING
 // setTimeout(() => {
 //     webhookRoutes.initiateForAll();
-// }, 45e3);
+// }, 30e3);
 
 app.listen(3050);
