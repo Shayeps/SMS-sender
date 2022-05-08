@@ -12,9 +12,9 @@ const connectDB = async (type) => {
             useNewUrlParser: true,
         })
 
-        return loggingFunc(`[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] MongoDB connected: ${conn.connection.host} -- ${type}`, 'success')
+        return loggingFunc(`MongoDB connected: ${conn.connection.host} -- ${type}`, 'success')
     } catch (error) {
-        return loggingFunc(`Error: ${error.message}`, 'error');
+        return loggingFunc(`${error.message}`, 'error');
     }
 };
 
